@@ -8,13 +8,16 @@ async function sendEmail(userEmail, summaries) {
   `).join("<hr>");
 
   await axios.post("https://api.brevo.com/v3/smtp/email", {
-    sender: { name: "Bookmark Bot", email: "amaninsane139@gmail.com" },
+    sender: { 
+      name: "Bookmark Bot", 
+      email: process.env.EMAIL_FROM 
+    },
     to: [{ email: userEmail }],
     subject: "Your Bookmark Podcast is Ready 🎧",
     htmlContent: html
   }, {
     headers: {
-      "api-key": process.env.BREVO_KEY,
+      "api-key": process.env.BREVO_API_KEY,
       "Content-Type": "application/json"
     }
   });
