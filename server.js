@@ -280,19 +280,12 @@ async function generateSpeech(text, isAlex = true) {
       url: `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       headers: {
         'Accept': 'audio/mpeg',
-        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        'xi-api-key': process.env.ELEVENLABS_API_KEY.trim(),
         'Content-Type': 'application/json'
       },
       data: {
         text: formattedText,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.0,
-          use_speaker_boost: true,
-          speaking_rate: 0.9
-        }
+        model_id: "eleven_multilingual_v2"
       },
       responseType: 'arraybuffer'
     });
@@ -301,11 +294,21 @@ async function generateSpeech(text, isAlex = true) {
     console.log('Speech generated successfully');
     return audioBuffer;
   } catch (error) {
-    console.error('Error in generateSpeech:', {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data
-    });
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('ElevenLabs API Error:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data ? Buffer.from(error.response.data).toString() : undefined
+      });
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('ElevenLabs Request Error:', error.request);
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('ElevenLabs Error:', error.message);
+    }
     throw error;
   }
 }
