@@ -12,17 +12,40 @@ const writeFileAsync = promisify(fs.writeFile);
 const unlinkAsync = promisify(fs.unlink);
 const nodemailer = require('nodemailer');
 const { ElevenLabsClient } = require("@elevenlabs/elevenlabs-js");
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
+
+// Add retry logic for axios
+const axiosWithRetry = async (url, options, maxRetries = 3) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await axios(url, options);
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      console.log(`Retry ${i + 1}/${maxRetries} for ${url}`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+    }
+  }
+};
 
 // Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY,
+  vertexai: false // Using direct API access
+});
 
-// Initialize ElevenLabs client
+// Initialize ElevenLabs client with better error handling
 if (!process.env.ELEVENLABS_API_KEY) {
   console.error('ELEVENLABS_API_KEY is not set in environment variables');
   process.exit(1);
 }
-const elevenlabs = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
+
+// Log the first few characters of the API key for verification (for security, don't log the full key)
+console.log('ElevenLabs API Key prefix:', process.env.ELEVENLABS_API_KEY.substring(0, 10) + '...');
+
+const elevenlabs = new ElevenLabsClient({ 
+  apiKey: process.env.ELEVENLABS_API_KEY,
+  timeout: 30000 // Increase timeout to 30 seconds
+});
 
 // Log all environment variables (for debugging)
 console.log('Environment variables loaded:');
@@ -46,8 +69,8 @@ app.use(cors({
       return callback(null, true);
     }
     
-    // Allow your Render.com domain (you'll add this URL after deployment)
-    if (origin === 'https://your-app-name.onrender.com') {
+    // Allow your Render.com domain
+    if (origin === 'https://podbackend-d9cg.onrender.com') {
       return callback(null, true);
     }
     
@@ -250,39 +273,54 @@ async function generateSpeech(text, isAlex = true) {
       .trim();
 
     // Use different friendly female voices for both hosts
-    // Using Bella (warm, friendly) and Rachel (clear, engaging) voices
-    const voiceId = isAlex ? "EXAVITQu4vr4xnSDxMaL" : "21m00Tcm4TlvDq8ikWAM"; // Bella for Alex, Rachel for Sarah
+    const voiceId = isAlex ? "EXAVITQu4vr4xnSDxMaL" : "21m00Tcm4TlvDq8ikWAM";
     console.log(`Using voice ID: ${voiceId} for ${isAlex ? 'Alex' : 'Sarah'}`);
 
-    const response = await elevenlabs.textToSpeech.convert(voiceId, {
-      text: formattedText,
-      voiceId: voiceId,
-      modelId: "eleven_multilingual_v2",
-      outputFormat: "mp3_44100_128",
-      voice_settings: {
-        stability: 0.5,        // Lower stability for more natural variation
-        similarity_boost: 0.75, // Higher similarity to maintain accent
-        style: 0.0,           // Neutral style
-        use_speaker_boost: true, // Enhance voice clarity
-        speaking_rate: 0.9     // Slightly slower speaking rate (0.8-1.0 is good for natural pace)
+    // Add retry logic for ElevenLabs
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        const response = await elevenlabs.textToSpeech.convert(voiceId, {
+          text: formattedText,
+          voiceId: voiceId,
+          modelId: "eleven_multilingual_v2",
+          outputFormat: "mp3_44100_128",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+            style: 0.0,
+            use_speaker_boost: true,
+            speaking_rate: 0.9
+          }
+        });
+
+        // Convert ReadableStream to Buffer
+        const chunks = [];
+        const reader = response.getReader();
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+
+        const audioBuffer = Buffer.concat(chunks);
+        console.log('Speech generated successfully');
+        return audioBuffer;
+      } catch (error) {
+        retries--;
+        if (retries === 0) throw error;
+        console.log(`Retrying ElevenLabs request. Attempts remaining: ${retries}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-    });
-
-    // Convert ReadableStream to Buffer
-    const chunks = [];
-    const reader = response.getReader();
-    
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
     }
-
-    const audioBuffer = Buffer.concat(chunks);
-    console.log('Speech generated successfully');
-    return audioBuffer;
   } catch (error) {
-    console.error('Error in generateSpeech:', error);
+    console.error('Error in generateSpeech:', {
+      message: error.message,
+      status: error.statusCode,
+      body: error.body,
+      rawResponse: error.rawResponse
+    });
     throw error;
   }
 }
@@ -342,14 +380,14 @@ async function generateSummaryAndPodcast(bookmarks) {
     if (!bookmark.url || !bookmark.url.startsWith('http')) continue;
     try {
       console.log(`Processing bookmark: ${bookmark.url}`);
-      const response = await axios.get(bookmark.url, {
+      const response = await axiosWithRetry(bookmark.url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
           'Connection': 'keep-alive',
         },
-        timeout: 10000
+        timeout: 15000 // Increased timeout
       });
       
       const $ = cheerio.load(response.data);
@@ -455,7 +493,7 @@ const PORT = process.env.PORT || 3001;
 const HOST = '0.0.0.0';
 app.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}`);
-  console.log('Test the server at: http://localhost:3000/test');
+  console.log('Test the server at: http://localhost:3001/test');
 });
 
 
