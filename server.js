@@ -12,13 +12,10 @@ const writeFileAsync = promisify(fs.writeFile);
 const unlinkAsync = promisify(fs.unlink);
 const nodemailer = require('nodemailer');
 const { ElevenLabsClient } = require("@elevenlabs/elevenlabs-js");
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Initialize Gemini
-const genAI = new GoogleGenAI({ 
-  apiKey: process.env.GEMINI_API_KEY,
-  vertexai: false // Using direct API access
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Initialize ElevenLabs client
 if (!process.env.ELEVENLABS_API_KEY) {
