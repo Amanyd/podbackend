@@ -41,8 +41,7 @@ const apiKeyPreview = process.env.ELEVENLABS_API_KEY.substring(0, 4) + '...';
 console.log('Initializing ElevenLabs with API key:', apiKeyPreview);
 
 const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY,
-  baseUrl: 'https://api.elevenlabs.io/v1'
+  apiKey: process.env.ELEVENLABS_API_KEY
 });
 
 // Log all environment variables (for debugging)
@@ -271,54 +270,32 @@ async function generateSpeech(text, isAlex = true) {
       .trim();
 
     // Use different friendly female voices for both hosts
-    const voiceId = isAlex ? "EXAVITQu4vr4xnSDxMaL" : "21m00Tcm4TlvDq8ikWAM";
+    const voiceId = isAlex ? "EXAVITQu4vr4xnSDxMaL" : "21m00Tcm4TlvDq8ikWAM"; // Bella for Alex, Rachel for Sarah
     console.log(`Using voice ID: ${voiceId} for ${isAlex ? 'Alex' : 'Sarah'}`);
 
-    // Add retry logic for ElevenLabs
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        const response = await elevenlabs.textToSpeech.convert(voiceId, {
-          text: formattedText,
-          voiceId: voiceId,
-          modelId: "eleven_multilingual_v2",
-          outputFormat: "mp3_44100_128",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-            style: 0.0,
-            use_speaker_boost: true,
-            speaking_rate: 0.9
-          }
-        });
-
-        // Convert ReadableStream to Buffer
-        const chunks = [];
-        const reader = response.getReader();
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-
-        const audioBuffer = Buffer.concat(chunks);
-        console.log('Speech generated successfully');
-        return audioBuffer;
-      } catch (error) {
-        retries--;
-        if (retries === 0) throw error;
-        console.log(`Retrying ElevenLabs request. Attempts remaining: ${retries}`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    const audio = await elevenlabs.textToSpeech.convert(voiceId, {
+      text: formattedText,
+      model_id: "eleven_multilingual_v2",
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+        style: 0.0,
+        use_speaker_boost: true,
+        speaking_rate: 0.9
       }
-    }
-  } catch (error) {
-    console.error('Error in generateSpeech:', {
-      message: error.message,
-      status: error.statusCode,
-      body: error.body,
-      rawResponse: error.rawResponse
     });
+
+    // Convert the response to a Buffer
+    const chunks = [];
+    for await (const chunk of audio) {
+      chunks.push(chunk);
+    }
+    const audioBuffer = Buffer.concat(chunks);
+    
+    console.log('Speech generated successfully');
+    return audioBuffer;
+  } catch (error) {
+    console.error('Error in generateSpeech:', error);
     throw error;
   }
 }
