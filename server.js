@@ -41,7 +41,8 @@ const apiKeyPreview = process.env.ELEVENLABS_API_KEY.substring(0, 4) + '...';
 console.log('Initializing ElevenLabs with API key:', apiKeyPreview);
 
 const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY
+  apiKey: process.env.ELEVENLABS_API_KEY,
+  baseUrl: 'https://api.elevenlabs.io/v1'
 });
 
 // Log all environment variables (for debugging)
@@ -273,29 +274,38 @@ async function generateSpeech(text, isAlex = true) {
     const voiceId = isAlex ? "EXAVITQu4vr4xnSDxMaL" : "21m00Tcm4TlvDq8ikWAM"; // Bella for Alex, Rachel for Sarah
     console.log(`Using voice ID: ${voiceId} for ${isAlex ? 'Alex' : 'Sarah'}`);
 
-    const audio = await elevenlabs.textToSpeech.convert(voiceId, {
-      text: formattedText,
-      model_id: "eleven_multilingual_v2",
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.0,
-        use_speaker_boost: true,
-        speaking_rate: 0.9
-      }
+    // Make direct API call to ElevenLabs
+    const response = await axios({
+      method: 'POST',
+      url: `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      headers: {
+        'Accept': 'audio/mpeg',
+        'xi-api-key': process.env.ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      data: {
+        text: formattedText,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.0,
+          use_speaker_boost: true,
+          speaking_rate: 0.9
+        }
+      },
+      responseType: 'arraybuffer'
     });
 
-    // Convert the response to a Buffer
-    const chunks = [];
-    for await (const chunk of audio) {
-      chunks.push(chunk);
-    }
-    const audioBuffer = Buffer.concat(chunks);
-    
+    const audioBuffer = Buffer.from(response.data);
     console.log('Speech generated successfully');
     return audioBuffer;
   } catch (error) {
-    console.error('Error in generateSpeech:', error);
+    console.error('Error in generateSpeech:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
     throw error;
   }
 }
