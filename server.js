@@ -12,7 +12,7 @@ const writeFileAsync = promisify(fs.writeFile);
 const unlinkAsync = promisify(fs.unlink);
 const nodemailer = require('nodemailer');
 const { ElevenLabsClient } = require("@elevenlabs/elevenlabs-js");
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 
 // Add retry logic for axios
 const axiosWithRetry = async (url, options, maxRetries = 3) => {
@@ -66,7 +66,7 @@ const geminiWithRetry = async (prompt, maxRetries = 3) => {
 };
 
 // Initialize Gemini
-const genAI = new GoogleGenerativeAI({ 
+const genAI = new GoogleGenAI({ 
   apiKey: process.env.GEMINI_API_KEY,
   vertexai: false // Using direct API access
 });
