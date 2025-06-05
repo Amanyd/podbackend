@@ -30,18 +30,19 @@ const axiosWithRetry = async (url, options, maxRetries = 3) => {
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Initialize ElevenLabs client with better error handling
+// Initialize ElevenLabs client
 if (!process.env.ELEVENLABS_API_KEY) {
   console.error('ELEVENLABS_API_KEY is not set in environment variables');
   process.exit(1);
 }
 
-// Log the first few characters of the API key for verification (for security, don't log the full key)
-console.log('ElevenLabs API Key prefix:', process.env.ELEVENLABS_API_KEY.substring(0, 10) + '...');
+// Log the first few characters of the API key for debugging (safely)
+const apiKeyPreview = process.env.ELEVENLABS_API_KEY.substring(0, 4) + '...';
+console.log('Initializing ElevenLabs with API key:', apiKeyPreview);
 
-const elevenlabs = new ElevenLabsClient({ 
+const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
-  timeout: 30000 // Increase timeout to 30 seconds
+  baseUrl: 'https://api.elevenlabs.io/v1'
 });
 
 // Log all environment variables (for debugging)
