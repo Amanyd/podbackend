@@ -78,8 +78,8 @@ if (!process.env.ELEVENLABS_API_KEY) {
 console.log('ElevenLabs API Key prefix:', process.env.ELEVENLABS_API_KEY.substring(0, 10) + '...');
 
 const elevenlabs = new ElevenLabsClient({ 
-  apiKey: process.env.ELEVENLABS_API_KEY,
-  timeout: 30000 // Increase timeout to 30 seconds
+  apiKey: process.env.ELEVENLABS_API_KEY.trim(),
+  baseUrl: 'https://api.elevenlabs.io/v1'
 });
 
 // Log all environment variables (for debugging)
@@ -293,31 +293,29 @@ async function generateSpeech(text, isAlex = true) {
     let retries = 3;
     while (retries > 0) {
       try {
-        const response = await elevenlabs.textToSpeech.convert(voiceId, {
-          text: formattedText,
-          voiceId: voiceId,
-          modelId: "eleven_multilingual_v2",
-          outputFormat: "mp3_44100_128",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-            style: 0.0,
-            use_speaker_boost: true,
-            speaking_rate: 0.9
-          }
+        const response = await axios({
+          method: 'POST',
+          url: `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+          headers: {
+            'Accept': 'audio/mpeg',
+            'xi-api-key': process.env.ELEVENLABS_API_KEY.trim(),
+            'Content-Type': 'application/json'
+          },
+          data: {
+            text: formattedText,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75,
+              style: 0.0,
+              use_speaker_boost: true,
+              speaking_rate: 0.9
+            }
+          },
+          responseType: 'arraybuffer'
         });
 
-        // Convert ReadableStream to Buffer
-        const chunks = [];
-        const reader = response.getReader();
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-
-        const audioBuffer = Buffer.concat(chunks);
+        const audioBuffer = Buffer.from(response.data);
         console.log('Speech generated successfully');
         return audioBuffer;
       } catch (error) {
@@ -330,9 +328,8 @@ async function generateSpeech(text, isAlex = true) {
   } catch (error) {
     console.error('Error in generateSpeech:', {
       message: error.message,
-      status: error.statusCode,
-      body: error.body,
-      rawResponse: error.rawResponse
+      status: error.response?.status,
+      data: error.response?.data ? Buffer.from(error.response.data).toString() : undefined
     });
     throw error;
   }
