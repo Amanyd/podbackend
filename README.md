@@ -126,7 +126,7 @@ The service includes comprehensive error handling for:
 
 ## Related Repositories
 
-- [Frontend Repository](https://github.com/Amanyd/podfrontend) - Chrome extension and web interface
+- [Frontend Repository](https://github.com/Amanyd/aipodcast.git) - Chrome extension and web interface
 
 ## License
 
